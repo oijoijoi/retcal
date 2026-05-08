@@ -1,7 +1,14 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import {
+  DEFAULT_PERIODS_PALLETE,
+  PERIODS_PALLETE_STORAGE_KEY,
+  PeriodPallete,
+} from '@/constants/models';
+import { getJson, remove, setJson } from '@/lib/device-storage';
 
 const PERIODS_STORAGE_KEY = 'lifePeriods';
 const DAY_MS = 24 * 60 * 60 * 1000;
+let periodsPalleteMemory: PeriodPallete | null = null;
 
 export interface LifePeriod {
   id: string;
@@ -14,11 +21,17 @@ export interface LifePeriod {
   durationMonths: number;
 }
 
-export function getPeriodDurations(start: Date, end: Date): {
+export function getPeriodDurations(
+  start: Date,
+  end: Date
+): {
   durationWeeks: number;
   durationMonths: number;
 } {
-  const diffDays = Math.max(0, Math.ceil((end.getTime() - start.getTime()) / DAY_MS));
+  const diffDays = Math.max(
+    0,
+    Math.ceil((end.getTime() - start.getTime()) / DAY_MS)
+  );
   const durationWeeks = diffDays === 0 ? 0 : Math.ceil(diffDays / 7);
 
   const monthsDiff =
@@ -48,4 +61,39 @@ export async function savePeriod(period: LifePeriod): Promise<void> {
   const existing = await loadPeriods();
   const next = [period, ...existing];
   await AsyncStorage.setItem(PERIODS_STORAGE_KEY, JSON.stringify(next));
+}
+
+export async function loadPeriodsPallete(): Promise<PeriodPallete | null> {
+  if (periodsPalleteMemory) {
+    return periodsPalleteMemory;
+  }
+
+  const stored = await getJson<PeriodPallete>(PERIODS_PALLETE_STORAGE_KEY);
+  if (!stored) {
+    return null;
+  }
+
+  periodsPalleteMemory = stored;
+  return stored;
+}
+
+export async function savePeriodsPallete(pallete: PeriodPallete): Promise<void> {
+  periodsPalleteMemory = pallete;
+  await setJson(PERIODS_PALLETE_STORAGE_KEY, pallete);
+}
+
+export async function ensurePeriodsPalleteInitialized(): Promise<PeriodPallete> {
+  const existing = await loadPeriodsPallete();
+  if (existing) {
+    return existing;
+  }
+
+  await savePeriodsPallete(DEFAULT_PERIODS_PALLETE);
+  return DEFAULT_PERIODS_PALLETE;
+}
+
+export async function clearPeriods(): Promise<void> {
+  await AsyncStorage.removeItem(PERIODS_STORAGE_KEY);
+  periodsPalleteMemory = null;
+  await remove(PERIODS_PALLETE_STORAGE_KEY);
 }

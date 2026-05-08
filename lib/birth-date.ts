@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const BIRTH_DATE_STORAGE_KEY = 'birthDateIso';
+const STORAGE_DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
 
 export function parseBirthDateInput(input: string): Date | null {
   const normalized = input.trim();
@@ -35,7 +36,11 @@ export function formatBirthDateInput(date: Date): string {
 }
 
 export async function saveBirthDate(date: Date): Promise<void> {
-  await AsyncStorage.setItem(BIRTH_DATE_STORAGE_KEY, date.toISOString());
+  const yyyy = String(date.getFullYear());
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const dd = String(date.getDate()).padStart(2, '0');
+  const storageDate = `${yyyy}-${mm}-${dd}`;
+  await AsyncStorage.setItem(BIRTH_DATE_STORAGE_KEY, storageDate);
 }
 
 export async function loadBirthDate(): Promise<Date | null> {
@@ -44,12 +49,30 @@ export async function loadBirthDate(): Promise<Date | null> {
     return null;
   }
 
-  const date = new Date(raw);
-  if (Number.isNaN(date.getTime())) {
-    return null;
+  // Preferred format: YYYY-MM-DD (date-only, no timezone issues).
+  const ymdMatch = raw.match(STORAGE_DATE_PATTERN);
+  if (ymdMatch) {
+    const year = Number(ymdMatch[1]);
+    const month = Number(ymdMatch[2]);
+    const day = Number(ymdMatch[3]);
+    const date = new Date(year, month - 1, day);
+    if (
+      date.getFullYear() !== year ||
+      date.getMonth() !== month - 1 ||
+      date.getDate() !== day
+    ) {
+      return null;
+    }
+    return date;
   }
 
-  return date;
+  // Legacy compatibility disabled for now (old ISO values are ignored).
+  // const legacyDate = new Date(raw);
+  // if (Number.isNaN(legacyDate.getTime())) {
+  //   return null;
+  // }
+  // return legacyDate;
+  return null;
 }
 
 export async function clearBirthDate(): Promise<void> {

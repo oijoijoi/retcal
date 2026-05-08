@@ -1,4 +1,3 @@
-import { Ionicons } from '@expo/vector-icons';
 import {
   clearBirthDate,
   formatBirthDateInput,
@@ -6,15 +5,35 @@ import {
   parseBirthDateInput,
   saveBirthDate,
 } from '@/lib/birth-date';
+import { clearGridArrays, saveGridArraysFromBirthDate } from '@/lib/grid-arrays';
+import { clearPeriods, ensurePeriodsPalleteInitialized } from '@/lib/periods';
 import { getWeeksPassedFromBirthDate } from '@/lib/weeks';
+import { Ionicons } from '@expo/vector-icons';
+import DateTimePicker, {
+  DateTimePickerEvent,
+} from '@react-native-community/datetimepicker';
 import { router } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import {
+  Alert,
+  Modal,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function SettingsScreen() {
   const [birthDate, setBirthDate] = useState('');
-  const parsedBirthDate = useMemo(() => parseBirthDateInput(birthDate), [birthDate]);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [pickerDraftDate, setPickerDraftDate] = useState(new Date(1990, 0, 1));
+  const parsedBirthDate = useMemo(
+    () => parseBirthDateInput(birthDate),
+    [birthDate]
+  );
   const weeksPreview = useMemo(() => {
     if (!parsedBirthDate) {
       return null;
@@ -57,6 +76,8 @@ export default function SettingsScreen() {
     }
 
     await saveBirthDate(date);
+    await ensurePeriodsPalleteInitialized();
+    await saveGridArraysFromBirthDate(date);
 
     Alert.alert('Успех', 'Дата рождения сохранена!', [
       { text: 'OK', onPress: () => router.back() },
@@ -82,10 +103,33 @@ export default function SettingsScreen() {
     setBirthDate(`${day}.${month}.${year}`);
   };
 
+  const handleDatePickerChange = (
+    event: DateTimePickerEvent,
+    selectedDate?: Date
+  ) => {
+    if (event.type === 'dismissed') {
+      return;
+    }
+
+    if (selectedDate) {
+      setPickerDraftDate(selectedDate);
+    }
+  };
+
+  const handleOpenDatePicker = () => {
+    setPickerDraftDate(parsedBirthDate ?? new Date(1990, 0, 1));
+    setShowDatePicker(true);
+  };
+
+  const handleConfirmDatePicker = () => {
+    setBirthDate(formatBirthDateInput(pickerDraftDate));
+    setShowDatePicker(false);
+  };
+
   const handleReset = () => {
     Alert.alert(
-      'Сбросить дату?',
-      'Сохраненная дата рождения будет удалена. Продолжить?',
+      'Сбросить данные?',
+      'Сохраненные дата рождения и периоды будут удалены. Продолжить?',
       [
         { text: 'Отмена', style: 'cancel' },
         {
@@ -93,8 +137,12 @@ export default function SettingsScreen() {
           style: 'destructive',
           onPress: async () => {
             await clearBirthDate();
+            await clearPeriods();
+            await clearGridArrays();
             setBirthDate('');
-            Alert.alert('Готово', 'Дата рождения сброшена');
+            Alert.alert('Готово', 'Сохраненные данные сброшены', [
+              { text: 'OK', onPress: () => router.back() },
+            ]);
           },
         },
       ]
@@ -114,44 +162,80 @@ export default function SettingsScreen() {
 
         {/* Форма */}
         <View style={styles.form}>
-          <Text style={styles.label}>
-            Дата рождения
-          </Text>
+          <Text style={styles.label}>Дата рождения</Text>
           <Text style={styles.description}>
             Введите дату рождения для расчета сетки недель
           </Text>
-          
-          <TextInput
-            value={birthDate}
-            onChangeText={handleBirthDateChange}
-            placeholder="ДД.ММ.ГГГГ (например: 01.01.1990)"
-            style={styles.input}
-            keyboardType="numeric"
-            maxLength={10}
-          />
+
+          <View style={styles.inputWrap}>
+            <TextInput
+              value={birthDate}
+              onChangeText={handleBirthDateChange}
+              placeholder="ДД.ММ.ГГГГ (например: 01.01.1990)"
+              style={styles.input}
+              keyboardType="numeric"
+              maxLength={10}
+            />
+            <Pressable
+              onPress={handleOpenDatePicker}
+              style={styles.calendarButton}
+              hitSlop={8}
+            >
+              <Ionicons name="calendar-outline" size={20} color="#6b7280" />
+            </Pressable>
+          </View>
 
           <View style={styles.previewBox}>
             <Text style={styles.previewTitle}>Наглядно для разработки</Text>
             <Text style={styles.previewValue}>
-              {weeksPreview === null ? 'Прошло недель: -' : `Прошло недель: ${weeksPreview}`}
+              {weeksPreview === null
+                ? 'Прошло недель: -'
+                : `Прошло недель: ${weeksPreview}`}
             </Text>
           </View>
 
-          <Pressable
-            onPress={handleSave}
-            style={styles.saveButton}
-          >
+          <Pressable onPress={handleSave} style={styles.saveButton}>
             <Text style={styles.saveButtonText}>Сохранить</Text>
           </Pressable>
 
-          <Pressable
-            onPress={handleReset}
-            style={styles.resetButton}
-          >
-            <Text style={styles.resetButtonText}>Сбросить дату</Text>
+          <Pressable onPress={handleReset} style={styles.resetButton}>
+            <Text style={styles.resetButtonText}>Сбросить данные</Text>
           </Pressable>
         </View>
       </View>
+      <Modal
+        visible={showDatePicker}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowDatePicker(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Выберите дату рождения</Text>
+            <DateTimePicker
+              value={pickerDraftDate}
+              mode="date"
+              display={Platform.OS === 'ios' ? 'spinner' : 'calendar'}
+              onChange={handleDatePickerChange}
+              maximumDate={new Date()}
+            />
+            <View style={styles.modalActions}>
+              <Pressable
+                onPress={() => setShowDatePicker(false)}
+                style={styles.modalCancelButton}
+              >
+                <Text style={styles.modalCancelText}>Отмена</Text>
+              </Pressable>
+              <Pressable
+                onPress={handleConfirmDatePicker}
+                style={styles.modalConfirmButton}
+              >
+                <Text style={styles.modalConfirmText}>Выбрать</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -195,6 +279,10 @@ const styles = StyleSheet.create({
     color: '#6b7280',
     marginBottom: 16,
   },
+  inputWrap: {
+    position: 'relative',
+    marginBottom: 24,
+  },
   input: {
     borderWidth: 1,
     borderColor: '#d1d5db',
@@ -202,7 +290,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     fontSize: 18,
-    marginBottom: 24,
+    paddingRight: 48,
+  },
+  calendarButton: {
+    position: 'absolute',
+    right: 10,
+    top: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 6,
   },
   saveButton: {
     backgroundColor: '#3b82f6',
@@ -247,5 +344,51 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: '700',
     color: '#111827',
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(17,24,39,0.4)',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+  },
+  modalCard: {
+    borderRadius: 14,
+    backgroundColor: '#fff',
+    paddingHorizontal: 14,
+    paddingTop: 14,
+    paddingBottom: 12,
+  },
+  modalTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 8,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 10,
+    marginTop: 8,
+  },
+  modalCancelButton: {
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+  },
+  modalCancelText: {
+    color: '#374151',
+    fontWeight: '600',
+  },
+  modalConfirmButton: {
+    borderRadius: 8,
+    backgroundColor: '#2563eb',
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+  },
+  modalConfirmText: {
+    color: '#fff',
+    fontWeight: '600',
   },
 });
