@@ -1,17 +1,24 @@
-import { WeekData } from '@/lib/weeks';
+import { Canvas, RoundedRect } from '@shopify/react-native-skia';
+import Constants from 'expo-constants';
 import React, { useMemo, useState } from 'react';
 import {
-  FlatList,
   LayoutChangeEvent,
-  ListRenderItem,
+  Platform,
+  ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
-import { WeekCell } from './WeekCell';
+
+export interface CellPaletteItem {
+  id: number;
+  color: string;
+  name: string;
+}
 
 interface WeekGridProps {
-  weeks: WeekData[];
+  cellData: Uint8Array;
+  palette: CellPaletteItem[];
   columns?: number;
   markerEveryRows?: number;
   splitAfter?: number;
@@ -24,9 +31,11 @@ const CELL_GAP = 2;
 const CONTAINER_PADDING = 8;
 const YEAR_COLUMN_WIDTH = 20;
 const TICK_GAP_TO_GRID = 2;
+const CELL_RADIUS = 2;
 
 export function WeekGrid({
-  weeks,
+  cellData,
+  palette,
   columns = 26,
   markerEveryRows = 2,
   splitAfter,
@@ -60,64 +69,169 @@ export function WeekGrid({
     return Math.max(4, available / columns);
   }, [columns, containerWidth, splitAfter, splitGap]);
 
-  const weekRows = useMemo(() => {
-    const rows: WeekData[][] = [];
-    for (let i = 0; i < weeks.length; i += columns) {
-      rows.push(weeks.slice(i, i + columns));
-    }
-    return rows;
-  }, [columns, weeks]);
+  const rowCount = useMemo(
+    () => Math.ceil(cellData.length / columns),
+    [cellData.length, columns]
+  );
 
   const splitSpacerWidth = Math.max(0, splitGap - CELL_GAP);
+  const rowHeight = cellSize + CELL_GAP;
+  const markerHeight = columns === 52 ? cellSize * 2 + CELL_GAP : cellSize;
+  const gridOffsetX = YEAR_COLUMN_WIDTH;
+  const canvasWidth = useMemo(() => {
+    if (containerWidth <= 0) {
+      return 0;
+    }
 
-  const renderRow: ListRenderItem<WeekData[]> = ({ item: row, index: rowIndex }) => (
-    <View style={styles.row}>
-      <View style={styles.yearColumn}>
-        {rowIndex % markerEveryRows === markerEveryRows - 1 ? (
-          <View style={styles.yearMarker}>
+    return Math.max(0, containerWidth - CONTAINER_PADDING * 2);
+  }, [containerWidth]);
+  const canvasHeight = useMemo(
+    () => rowCount * rowHeight,
+    [rowCount, rowHeight]
+  );
+
+  const paletteById = useMemo(() => {
+    const byId = new Map<number, CellPaletteItem>();
+    for (const item of palette) {
+      byId.set(item.id, item);
+    }
+    return byId;
+  }, [palette]);
+
+  const cells = useMemo(
+    () =>
+      Array.from(cellData, (value, index) => {
+        const row = Math.floor(index / columns);
+        const column = index % columns;
+        const splitOffset =
+          splitAfter && splitAfter > 0
+            ? Math.floor(column / splitAfter) * splitSpacerWidth
+            : 0;
+        const x = gridOffsetX + column * (cellSize + CELL_GAP) + splitOffset;
+        const y = row * rowHeight;
+        const color = paletteById.get(value)?.color ?? '#e5e7eb';
+        return (
+          <RoundedRect
+            key={`cell-${index}`}
+            x={x}
+            y={y}
+            width={cellSize}
+            height={cellSize}
+            color={color}
+            r={CELL_RADIUS}
+          />
+        );
+      }),
+    [
+      cellData,
+      columns,
+      paletteById,
+      rowHeight,
+      splitAfter,
+      splitSpacerWidth,
+      cellSize,
+      gridOffsetX,
+    ]
+  );
+
+  const markers = useMemo(
+    () =>
+      Array.from({ length: rowCount }).map((_, rowIndex) => {
+        if (rowIndex % markerEveryRows !== markerEveryRows - 1) {
+          return null;
+        }
+
+        return (
+          <View
+            key={`marker-${rowIndex}`}
+            style={[
+              styles.yearMarker,
+              {
+                top:
+                  columns === 52
+                    ? Math.max(0, (rowIndex - 1) * rowHeight)
+                    : rowIndex * rowHeight,
+                height: markerHeight,
+              },
+            ]}
+          >
             <Text style={styles.yearLabel}>
               {(Math.floor(rowIndex / markerEveryRows) + 1) * markerStep}
               {markerSuffix}
             </Text>
             <View style={styles.yearTick} />
           </View>
-        ) : null}
-      </View>
-
-      <View style={styles.weeksRow}>
-        {row.map((week, index) => (
-          <React.Fragment
-            key={`${week.year}-${week.weekNumber}-${week.date.getTime()}`}
-          >
-            <WeekCell
-              week={week}
-              size={cellSize}
-              gap={CELL_GAP}
-            />
-            {splitAfter &&
-            splitAfter > 0 &&
-            (index + 1) % splitAfter === 0 &&
-            index < row.length - 1 ? (
-              <View style={{ width: splitSpacerWidth }} />
-            ) : null}
-          </React.Fragment>
-        ))}
-      </View>
-    </View>
+        );
+      }),
+    [
+      columns,
+      markerEveryRows,
+      markerStep,
+      markerSuffix,
+      rowCount,
+      rowHeight,
+      markerHeight,
+    ]
   );
+
+  const fallbackCells = useMemo(
+    () =>
+      Array.from(cellData, (value, index) => {
+        const row = Math.floor(index / columns);
+        const column = index % columns;
+        const splitOffset =
+          splitAfter && splitAfter > 0
+            ? Math.floor(column / splitAfter) * splitSpacerWidth
+            : 0;
+        const x = gridOffsetX + column * (cellSize + CELL_GAP) + splitOffset;
+        const y = row * rowHeight;
+        const color = paletteById.get(value)?.color ?? '#e5e7eb';
+
+        return (
+          <View
+            key={`fallback-cell-${index}`}
+            style={{
+              position: 'absolute',
+              left: x,
+              top: y,
+              width: cellSize,
+              height: cellSize,
+              backgroundColor: color,
+              borderRadius: CELL_RADIUS,
+            }}
+          />
+        );
+      }),
+    [
+      cellData,
+      columns,
+      splitAfter,
+      splitSpacerWidth,
+      gridOffsetX,
+      cellSize,
+      rowHeight,
+      paletteById,
+    ]
+  );
+
+  const shouldUseSkia =
+    Platform.OS !== 'web' && Constants.appOwnership !== 'expo';
 
   return (
     <View style={styles.container} onLayout={onContainerLayout}>
-      <FlatList
-        data={weekRows}
-        renderItem={renderRow}
-        keyExtractor={(_, index) => `row-${index}`}
+      <ScrollView
         showsVerticalScrollIndicator
         contentContainerStyle={styles.contentContainer}
-        initialNumToRender={18}
-        maxToRenderPerBatch={24}
-        windowSize={12}
-      />
+      >
+        <View style={{ width: canvasWidth, height: canvasHeight }}>
+          {!shouldUseSkia ? (
+            <View style={StyleSheet.absoluteFillObject}>{fallbackCells}</View>
+          ) : (
+            <Canvas style={StyleSheet.absoluteFillObject}>{cells}</Canvas>
+          )}
+          {markers}
+        </View>
+      </ScrollView>
     </View>
   );
 }
@@ -130,17 +244,10 @@ const styles = StyleSheet.create({
   contentContainer: {
     padding: CONTAINER_PADDING,
   },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  yearColumn: {
+  yearMarker: {
+    position: 'absolute',
     width: YEAR_COLUMN_WIDTH,
     justifyContent: 'center',
-    alignItems: 'center',
-  },
-  yearMarker: {
-    width: '100%',
     alignItems: 'flex-end',
   },
   yearLabel: {
