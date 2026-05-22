@@ -1,10 +1,10 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   generateMonthsFromBirthDate,
   generateWeeksFromBirthDate,
   TOTAL_MONTHS,
   TOTAL_WEEKS,
 } from '@/lib/weeks';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const WEEKS_ARRAY_STORAGE_KEY = 'weeksArray';
 const MONTHES_ARRAY_STORAGE_KEY = 'monthesArray';
@@ -21,7 +21,20 @@ export function buildGridArraysFromBirthDate(birthDate: Date): GridArrays {
   };
 }
 
-export async function saveGridArraysFromBirthDate(birthDate: Date): Promise<void> {
+export function buildEmptyGridArrays(): GridArrays {
+  return {
+    weeksArray: new Uint8Array(TOTAL_WEEKS),
+    monthesArray: new Uint8Array(TOTAL_MONTHS),
+  };
+}
+
+export async function saveEmptyGridArrays(): Promise<void> {
+  await saveGridArrays(buildEmptyGridArrays());
+}
+
+export async function saveGridArraysFromBirthDate(
+  birthDate: Date
+): Promise<void> {
   const { weeksArray, monthesArray } = buildGridArraysFromBirthDate(birthDate);
 
   await AsyncStorage.multiSet([
@@ -48,7 +61,10 @@ export async function loadGridArrays(): Promise<GridArrays | null> {
     if (!Array.isArray(weeksParsed) || !Array.isArray(monthesParsed)) {
       return null;
     }
-    if (weeksParsed.length !== TOTAL_WEEKS || monthesParsed.length !== TOTAL_MONTHS) {
+    if (
+      weeksParsed.length !== TOTAL_WEEKS ||
+      monthesParsed.length !== TOTAL_MONTHS
+    ) {
       return null;
     }
 
@@ -59,6 +75,16 @@ export async function loadGridArrays(): Promise<GridArrays | null> {
   } catch {
     return null;
   }
+}
+
+export async function saveGridArrays({
+  weeksArray,
+  monthesArray,
+}: GridArrays): Promise<void> {
+  await AsyncStorage.multiSet([
+    [WEEKS_ARRAY_STORAGE_KEY, JSON.stringify(Array.from(weeksArray))],
+    [MONTHES_ARRAY_STORAGE_KEY, JSON.stringify(Array.from(monthesArray))],
+  ]);
 }
 
 export async function clearGridArrays(): Promise<void> {

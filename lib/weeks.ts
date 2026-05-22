@@ -73,3 +73,48 @@ export function getWeeksPassedFromBirthDate(birthDate: Date): number {
   const weeksPassed = getWeeksPassedByYearRule(birthDate, new Date());
   return Math.min(TOTAL_WEEKS, weeksPassed);
 }
+
+/** Индекс недели в weeksArray (0-based) для даты относительно даты рождения. */
+export function getWeekIndexFromBirthDate(
+  birthDate: Date,
+  targetDate: Date
+): number {
+  const weeksPassed = getWeeksPassedByYearRule(birthDate, targetDate);
+  if (weeksPassed <= 0) {
+    return 0;
+  }
+  return Math.min(TOTAL_WEEKS - 1, weeksPassed - 1);
+}
+
+/** Индекс месяца в monthesArray (0-based) для даты относительно даты рождения. */
+export function getMonthIndexFromBirthDate(
+  birthDate: Date,
+  targetDate: Date
+): number {
+  const target = startOfDay(targetDate);
+  const birth = startOfDay(birthDate);
+
+  if (target < birth) {
+    return 0;
+  }
+
+  for (let i = 0; i < TOTAL_MONTHS; i += 1) {
+    const monthStart = new Date(birth);
+    monthStart.setMonth(monthStart.getMonth() + i);
+    const monthEnd = new Date(
+      monthStart.getFullYear(),
+      monthStart.getMonth() + 1,
+      birth.getDate() - 1
+    );
+
+    if (target >= monthStart && target <= monthEnd) {
+      return i;
+    }
+
+    if (target < monthStart) {
+      return Math.max(0, i - 1);
+    }
+  }
+
+  return TOTAL_MONTHS - 1;
+}

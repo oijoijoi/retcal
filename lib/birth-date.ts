@@ -3,6 +3,14 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 const BIRTH_DATE_STORAGE_KEY = 'birthDateIso';
 const STORAGE_DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
 
+export function startOfCalendarDay(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+export function isDateBeforeDay(date: Date, minDate: Date): boolean {
+  return startOfCalendarDay(date).getTime() < startOfCalendarDay(minDate).getTime();
+}
+
 export function parseBirthDateInput(input: string): Date | null {
   const normalized = input.trim();
 
@@ -26,6 +34,21 @@ export function parseBirthDateInput(input: string): Date | null {
   }
 
   return date;
+}
+
+export function formatMaskedDateInput(text: string): string {
+  const digits = text.replace(/\D/g, '').slice(0, 8);
+  const day = digits.slice(0, 2);
+  const month = digits.slice(2, 4);
+  const year = digits.slice(4, 8);
+
+  if (digits.length <= 2) {
+    return day;
+  }
+  if (digits.length <= 4) {
+    return `${day}.${month}`;
+  }
+  return `${day}.${month}.${year}`;
 }
 
 export function formatBirthDateInput(date: Date): string {

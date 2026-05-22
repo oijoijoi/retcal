@@ -10,11 +10,9 @@ import {
   View,
 } from 'react-native';
 
-export interface CellPaletteItem {
-  id: number;
-  color: string;
-  name: string;
-}
+import type { CellPaletteItem } from '@/constants/models';
+
+export type { CellPaletteItem };
 
 interface WeekGridProps {
   cellData: Uint8Array;
@@ -25,6 +23,9 @@ interface WeekGridProps {
   splitGap?: number;
   markerStep?: number;
   markerSuffix?: string;
+  backgroundColor?: string;
+  markerTextColor?: string;
+  markerTickColor?: string;
 }
 
 const CELL_GAP = 2;
@@ -42,6 +43,9 @@ export function WeekGrid({
   splitGap = CELL_GAP,
   markerStep = 1,
   markerSuffix = '',
+  backgroundColor = 'white',
+  markerTextColor = '#6b7280',
+  markerTickColor = '#9ca3af',
 }: WeekGridProps) {
   const [containerWidth, setContainerWidth] = useState(0);
 
@@ -155,11 +159,13 @@ export function WeekGrid({
               },
             ]}
           >
-            <Text style={styles.yearLabel}>
+            <Text style={[styles.yearLabel, { color: markerTextColor }]}>
               {(Math.floor(rowIndex / markerEveryRows) + 1) * markerStep}
               {markerSuffix}
             </Text>
-            <View style={styles.yearTick} />
+            <View
+              style={[styles.yearTick, { backgroundColor: markerTickColor }]}
+            />
           </View>
         );
       }),
@@ -171,6 +177,8 @@ export function WeekGrid({
       rowCount,
       rowHeight,
       markerHeight,
+      markerTextColor,
+      markerTickColor,
     ]
   );
 
@@ -218,7 +226,10 @@ export function WeekGrid({
     Platform.OS !== 'web' && Constants.appOwnership !== 'expo';
 
   return (
-    <View style={styles.container} onLayout={onContainerLayout}>
+    <View
+      style={[styles.container, { backgroundColor }]}
+      onLayout={onContainerLayout}
+    >
       <ScrollView
         showsVerticalScrollIndicator
         contentContainerStyle={styles.contentContainer}
